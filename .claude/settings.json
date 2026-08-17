@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(node --check autogen-api.js)",
+      "Bash(node --check sidepanel.js)",
+      "Bash(node --check background.js)",
+      "Bash(node --check chatgpt-content.js)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3001/)",
+      "Bash(npx --no-install chromium-cli --help)",
+      "Bash(npm ls *)"
+    ]
+  }
+}
