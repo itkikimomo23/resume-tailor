@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { requireSession } from "@/lib/auth";
 import { generateFromTemplate } from "@/lib/generateResume";
+import { applicationDocxFilename, attachmentDisposition } from "@/lib/resumeFilename";
 
 export async function POST(
   request: NextRequest,
@@ -46,24 +47,20 @@ export async function POST(
   const backgroundInfo = profileName ? `Name: ${profileName}` : "";
 
   let buffer: Buffer;
-  let filename: string;
 
   try {
-    ({ buffer, filename } = await generateFromTemplate(templateId, backgroundInfo, app.job_description, { role: app.role }));
+    ({ buffer } = await generateFromTemplate(templateId, backgroundInfo, app.job_description, { role: app.role }));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ message: msg }, { status: 500 });
   }
 
-  const safeName = profileName
-    ? profileName.replace(/[^a-zA-Z0-9]/g, "") + "Resume"
-    : filename.replace(/\.docx$/i, "");
-  const driveFilename = app.seq ? `${safeName}_${app.seq}.docx` : `${safeName}.docx`;
+  const driveFilename = applicationDocxFilename(profileName, app.seq, app.company_name);
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename="${driveFilename}"`,
+      "Content-Disposition": attachmentDisposition(driveFilename),
       "X-Filename": driveFilename,
     },
   });

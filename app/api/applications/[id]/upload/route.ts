@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { uploadResumeToDrive } from "@/lib/googleDrive";
 import { requireSession } from "@/lib/auth";
+import { applicationDocxFilename } from "@/lib/resumeFilename";
 
 export async function POST(
   request: NextRequest,
@@ -14,7 +15,7 @@ export async function POST(
 
   const { data: app } = await supabase
     .from("applications")
-    .select("id, seq, status")
+    .select("id, seq, status, company_name")
     .eq("id", id)
     .single();
 
@@ -43,8 +44,7 @@ export async function POST(
 
   if (!profile) return NextResponse.json({ message: "Profile not found" }, { status: 404 });
 
-  const safeName = profile.name.replace(/\s+/g, "");
-  const filename = `${safeName}Resume_${app.seq}.docx`;
+  const filename = applicationDocxFilename(profile.name, app.seq, app.company_name);
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const { fileId, driveLink } = await uploadResumeToDrive(buffer, filename);

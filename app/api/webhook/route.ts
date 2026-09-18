@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { requireBearerAuth } from "@/lib/auth";
 import { generateFromTemplate } from "@/lib/generateResume";
 import { uploadResumeToDrive } from "@/lib/googleDrive";
+import { applicationDocxFilename } from "@/lib/resumeFilename";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -96,17 +97,14 @@ export async function POST(request: NextRequest) {
     after(async () => {
       try {
         const backgroundInfo = profileName ? `Name: ${profileName}` : "";
-        const { buffer, filename } = await generateFromTemplate(
+        const { buffer } = await generateFromTemplate(
           templateId,
           backgroundInfo,
           job_description!.trim(),
           { role }
         );
 
-        const baseName = profileName
-          ? profileName.replace(/[^a-zA-Z0-9]/g, "") + "Resume"
-          : filename.replace(/\.docx$/i, "");
-        const driveFilename = application.seq ? `${baseName}_${application.seq}.docx` : `${baseName}.docx`;
+        const driveFilename = applicationDocxFilename(profileName, application.seq, company_name);
         const { fileId, driveLink } = await uploadResumeToDrive(buffer, driveFilename);
 
         await supabase

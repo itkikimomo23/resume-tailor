@@ -10,6 +10,7 @@ import {
   mapStructuredToFlat,
   type StructuredAIOutput,
 } from "@/lib/docxTemplater";
+import { applicationDocxFilename } from "@/lib/resumeFilename";
 
 /**
  * Accepts ChatGPT's raw reply text, extracts the JSON object (tolerating markdown
@@ -39,7 +40,7 @@ export async function POST(
 
     const { data: app } = await supabase
       .from("applications")
-      .select("id, seq, profile_id, template_id")
+      .select("id, seq, profile_id, template_id, company_name")
       .eq("id", id)
       .maybeSingle();
     if (!app) return NextResponse.json({ status: "Error", detail: "Application not found." });
@@ -93,10 +94,7 @@ export async function POST(
       if (profile) profileName = profile.name ?? "";
     }
 
-    const baseName = profileName
-      ? profileName.replace(/[^a-zA-Z0-9]/g, "") + "Resume"
-      : tpl.name.replace(/\s+/g, "_");
-    const filename = app.seq ? `${baseName}_${app.seq}.docx` : `${baseName}.docx`;
+    const filename = applicationDocxFilename(profileName, app.seq, app.company_name);
 
     const { fileId, driveLink } = await uploadResumeToDrive(buffer, filename);
 

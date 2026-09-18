@@ -8,6 +8,7 @@ import {
   mapStructuredToFlat,
   type StructuredAIOutput,
 } from "@/lib/docxTemplater";
+import { applicationDocxFilename, attachmentDisposition } from "@/lib/resumeFilename";
 
 export async function POST(
   request: NextRequest,
@@ -33,7 +34,7 @@ export async function POST(
 
   const { data: app } = await supabase
     .from("applications")
-    .select("id, seq, profile_id")
+    .select("id, seq, profile_id, company_name")
     .eq("id", id)
     .single();
 
@@ -75,15 +76,12 @@ export async function POST(
     if (profile) profileName = profile.name ?? "";
   }
 
-  const baseName = profileName
-    ? profileName.replace(/[^a-zA-Z0-9]/g, "") + "Resume"
-    : tpl.name.replace(/\s+/g, "_");
-  const filename = app.seq ? `${baseName}_${app.seq}.docx` : `${baseName}.docx`;
+  const filename = applicationDocxFilename(profileName, app.seq, app.company_name);
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": attachmentDisposition(filename),
       "X-Filename": filename,
     },
   });

@@ -11,6 +11,7 @@ import { Tooltip } from "@base-ui/react/tooltip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { applicationDocxFilename, applicationResumeBaseName } from "@/lib/resumeFilename";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -127,11 +128,12 @@ function CopyButton({ url }: { url: string }) {
   );
 }
 
-function ActionButtons({ app, deletingId, onOpenJd, onDelete, onUpload }: {
-  app: Application; deletingId: string | null;
+function ActionButtons({ app, deletingId, downloading, onOpenJd, onDelete, onUpload, onDownload }: {
+  app: Application; deletingId: string | null; downloading: boolean;
   onOpenJd: (app: Application) => void;
   onDelete: (id: string) => void;
   onUpload: (app: Application) => void;
+  onDownload: (app: Application) => void;
 }) {
   return (
     <div className="flex items-center gap-1.5 flex-nowrap">
@@ -148,11 +150,13 @@ function ActionButtons({ app, deletingId, onOpenJd, onDelete, onUpload }: {
         </button>
       )}
       {app.status === "completed" && app.google_drive_file_id && (
-        <a href={`https://drive.google.com/uc?export=download&id=${app.google_drive_file_id}`}
-          target="_blank" rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all">
-          <Download size={12} /><span>Download</span>
-        </a>
+        <button
+          onClick={() => onDownload(app)}
+          disabled={downloading}
+          title={applicationDocxFilename(app.profile_name, app.seq, app.company_name)}
+          className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all disabled:opacity-60">
+          <Download size={12} /><span>{downloading ? "Downloading…" : "Download"}</span>
+        </button>
       )}
       <button onClick={() => onOpenJd(app)} title="View job description"
         className="inline-flex items-center justify-center size-7 rounded-lg border border-input bg-transparent text-muted-foreground hover:text-foreground hover:bg-accent transition-all">
@@ -195,6 +199,8 @@ export default function ApplicationsPage() {
   const [editingId, setEditingId]             = useState<string | null>(null);
   const [editFields, setEditFields]           = useState({ company_name: "", role: "" });
   const [selectedIds, setSelectedIds]         = useState<Set<string>>(new Set());
+  const [downloadingIds, setDownloadingIds]   = useState<Set<string>>(new Set());
+  const [downloadError, setDownloadError]     = useState<string | null>(null);
   const [bulkUpdating, setBulkUpdating]       = useState(false);
   const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false);
   const [jdModal, setJdModal] = useState<{ open: boolean; loading: boolean; content: string | null; title: string; role: string }>({
@@ -294,6 +300,39 @@ export default function ApplicationsPage() {
     setConfirmDeleteId(null);
     if (applications.length === 1 && page > 1) setPage(p => p - 1);
     else setRefreshKey(k => k + 1);
+  };
+
+  const handleDownload = async (app: Application) => {
+    setDownloadError(null);
+    setDownloadingIds(prev => new Set(prev).add(app.id));
+    try {
+      const res = await fetch(`/api/applications/${app.id}/download`);
+      if (!res.ok) {
+        let message = "Download failed";
+        try {
+          const data = await res.json();
+          if (data?.message) message = data.message;
+        } catch { /* ignore */ }
+        setDownloadError(message);
+        return;
+      }
+      const blob = await res.blob();
+      const docxName = res.headers.get("X-Filename") || applicationDocxFilename(app.profile_name, app.seq, app.company_name);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = docxName;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setDownloadingIds(prev => {
+        const next = new Set(prev);
+        next.delete(app.id);
+        return next;
+      });
+    }
   };
 
   const openJd = async (app: Application) => {
@@ -447,7 +486,7 @@ export default function ApplicationsPage() {
   const uploadPreviewName = (() => {
     if (!uploadModal.app || !uploadModal.profileId) return null;
     const p = profiles.find(pr => pr.id === uploadModal.profileId);
-    return p ? `${p.name.replace(/\s+/g, "")}Resume_${uploadModal.app.seq}` : null;
+    return p ? applicationResumeBaseName(p.name, uploadModal.app.seq, uploadModal.app.company_name) : null;
   })();
 
   return (
@@ -582,6 +621,16 @@ export default function ApplicationsPage() {
               </div>
             )}
           </div>
+
+          {downloadError && (
+            <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">
+              <AlertTriangle size={14} className="shrink-0" />
+              <span className="flex-1">{downloadError}</span>
+              <button onClick={() => setDownloadError(null)} className="text-destructive/70 hover:text-destructive" title="Dismiss">
+                <X size={13} />
+              </button>
+            </div>
+          )}
 
           {/* ── Content ── */}
           {loading ? (
@@ -735,7 +784,7 @@ export default function ApplicationsPage() {
                                 </button>
                               </>
                             ) : (
-                              <ActionButtons app={app} deletingId={deletingId} onOpenJd={openJd} onDelete={id => setConfirmDeleteId(id)} onUpload={openUpload} />
+                              <ActionButtons app={app} deletingId={deletingId} downloading={downloadingIds.has(app.id)} onOpenJd={openJd} onDelete={id => setConfirmDeleteId(id)} onUpload={openUpload} onDownload={handleDownload} />
                             )}
                           </div>
                         </td>
@@ -785,7 +834,7 @@ export default function ApplicationsPage() {
                       <span className="text-xs text-muted-foreground shrink-0">{formatDate(app.created_at)}</span>
                     </div>
                     <div className="pt-1 border-t border-border flex items-center justify-between gap-2">
-                      <ActionButtons app={app} deletingId={deletingId} onOpenJd={openJd} onDelete={id => setConfirmDeleteId(id)} onUpload={openUpload} />
+                      <ActionButtons app={app} deletingId={deletingId} downloading={downloadingIds.has(app.id)} onOpenJd={openJd} onDelete={id => setConfirmDeleteId(id)} onUpload={openUpload} onDownload={handleDownload} />
                       <button onClick={() => openNotes(app)} title={app.notes ?? "Add note"}
                         className={`inline-flex items-center justify-center size-7 rounded-lg border border-input bg-transparent transition-all shrink-0 ${app.notes ? "text-primary hover:bg-accent" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}>
                         <NotebookPen size={12} />
