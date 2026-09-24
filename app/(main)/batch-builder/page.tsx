@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { DocxTemplate } from "@/lib/types";
+import { extractJsonAnswer } from "@/lib/jsonAnswer";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -236,9 +237,9 @@ function AppCard({
                 onClick={() => {
                   if (!templateId) return;
                   try {
-                    JSON.parse(jsonInput.trim());
+                    extractJsonAnswer(jsonInput);
                     setJsonInputError(null);
-                    onBuildJson(jsonInput.trim(), templateId);
+                    onBuildJson(jsonInput, templateId);
                   } catch (e) {
                     setJsonInputError(e instanceof Error ? e.message : "Invalid JSON");
                   }
@@ -377,7 +378,7 @@ export default function BatchBuilderPage() {
     if (!templateId) return;
     setCardPhase(app.id, "building");
     try {
-      const jsonData = JSON.parse(jsonStr);
+      const jsonData = extractJsonAnswer(jsonStr);
       const res = await fetch(`/api/batch-builder/${app.id}/generate-from-json`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

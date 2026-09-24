@@ -7,6 +7,7 @@ import {
   mapStructuredToFlat,
   type StructuredAIOutput,
 } from "@/lib/docxTemplater";
+import { scrubPastedTextInJson } from "@/lib/jsonAnswer";
 
 export async function POST(request: NextRequest) {
   let templateId: string;
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest) {
   if (!values || typeof values !== "object" || Array.isArray(values))
     return NextResponse.json({ message: "values must be a JSON object" }, { status: 400 });
 
+  values = scrubPastedTextInJson(values) as Record<string, unknown>;
   const { data: tpl, error: tplError } = await supabase
     .from("docx_templates")
     .select("name, storage_path")

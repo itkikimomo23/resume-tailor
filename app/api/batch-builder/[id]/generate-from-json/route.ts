@@ -9,6 +9,7 @@ import {
   type StructuredAIOutput,
 } from "@/lib/docxTemplater";
 import { applicationDocxFilename, attachmentDisposition } from "@/lib/resumeFilename";
+import { scrubPastedTextInJson } from "@/lib/jsonAnswer";
 
 export async function POST(
   request: NextRequest,
@@ -31,6 +32,8 @@ export async function POST(
     return NextResponse.json({ message: "templateId is required" }, { status: 400 });
   if (!jsonData || typeof jsonData !== "object" || Array.isArray(jsonData))
     return NextResponse.json({ message: "jsonData must be an object" }, { status: 400 });
+
+  jsonData = scrubPastedTextInJson(jsonData) as Record<string, unknown>;
 
   const { data: app } = await supabase
     .from("applications")

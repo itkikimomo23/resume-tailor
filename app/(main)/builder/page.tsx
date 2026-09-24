@@ -8,6 +8,7 @@ import {
 import { DocxTemplate } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { getJsonCoveredVars } from "@/lib/docxTemplater";
+import { extractJsonAnswer } from "@/lib/jsonAnswer";
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
@@ -69,12 +70,9 @@ function parseJson(raw: string): { data: Record<string, unknown> | null; error: 
   const trimmed = raw.trim();
   if (!trimmed) return { data: null, error: null };
   try {
-    const parsed = JSON.parse(trimmed);
-    if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null)
-      return { data: null, error: "Must be a JSON object { ... }" };
-    return { data: parsed as Record<string, unknown>, error: null };
-  } catch {
-    return { data: null, error: "Invalid JSON" };
+    return { data: extractJsonAnswer(trimmed), error: null };
+  } catch (e) {
+    return { data: null, error: e instanceof Error ? e.message : "Invalid JSON" };
   }
 }
 
@@ -176,7 +174,7 @@ function ResumeSection({ templates, loadingData, state, onChange, onValidate, on
           onPaste={(e) => {
             const text = e.clipboardData.getData("text");
             try {
-              const parsed = JSON.parse(text);
+              const parsed = extractJsonAnswer(text);
               e.preventDefault();
               onChange({ jsonInput: JSON.stringify(parsed, null, 2), error: null, downloadUrl: null, validation: null });
             } catch {

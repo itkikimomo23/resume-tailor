@@ -2,6 +2,8 @@ import { supabase } from "@/lib/supabase";
 import { extractTemplateVariables } from "@/lib/docxTemplater";
 import { resolveSystemPrompt } from "@/lib/promptResolution";
 
+export { extractJsonAnswer, stripJsonNoise, scrubPastedTextInJson } from "@/lib/jsonAnswer";
+
 /**
  * Shared prompt-building + answer-parsing helpers used by every code path that
  * turns an application + a docx template into a ChatGPT/OpenAI prompt, or turns
@@ -36,70 +38,6 @@ ${backgroundInfo.trim() || "(not provided — infer reasonable content from the 
 Template note: generate exactly ${expCount} entries in the experience array (one per job slot).
 
 Return the JSON object now.`;
-}
-
-/**
- * Repairs the most common way LLMs break JSON: writing a literal `"` inside a
- * string value (e.g. the "reliable" way instead of \"reliable\") instead of
- * escaping it. A `"` only closes a string if the next non-whitespace char is
- * a JSON structural token (`,` `}` `]` `:`); otherwise it's literal content
- * and gets escaped so the string continues.
- */
-function repairUnescapedQuotes(text: string): string {
-  let out = "";
-  let inString = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (ch === "\\" && inString) {
-      out += ch + (text[i + 1] ?? "");
-      i++;
-      continue;
-    }
-    if (ch === '"') {
-      if (!inString) {
-        inString = true;
-        out += ch;
-        continue;
-      }
-      let j = i + 1;
-      while (j < text.length && /\s/.test(text[j])) j++;
-      const next = text[j];
-      const closesString = next === undefined || ",}]:".includes(next);
-      if (closesString) {
-        inString = false;
-        out += ch;
-      } else {
-        out += '\\"';
-      }
-      continue;
-    }
-    out += ch;
-  }
-  return out;
-}
-
-/**
- * Tolerantly extracts a JSON object from an LLM reply, coping with markdown
- * fences or surrounding prose by falling back to the first `{` .. last `}`
- * span, then to escaping stray unescaped quotes inside string values.
- */
-export function extractJsonAnswer(text: string): Record<string, unknown> {
-  const trimmed = String(text ?? "").trim();
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const start = trimmed.indexOf("{");
-    const end = trimmed.lastIndexOf("}");
-    if (start === -1 || end <= start) {
-      throw new Error("Could not parse JSON from model response");
-    }
-    const candidate = trimmed.slice(start, end + 1);
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      return JSON.parse(repairUnescapedQuotes(candidate));
-    }
-  }
 }
 
 export interface PromptApplication {
