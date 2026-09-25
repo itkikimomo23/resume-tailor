@@ -2,7 +2,7 @@ import { supabase } from "@/lib/supabase";
 import { extractTemplateVariables } from "@/lib/docxTemplater";
 import { resolveSystemPrompt } from "@/lib/promptResolution";
 
-export { extractJsonAnswer, stripJsonNoise, scrubPastedTextInJson } from "@/lib/jsonAnswer";
+export { extractJsonAnswer, stripJsonNoise, scrubPastedTextInJson, scrubPastedTextInValue } from "@/lib/jsonAnswer";
 
 /**
  * Shared prompt-building + answer-parsing helpers used by every code path that

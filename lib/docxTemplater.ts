@@ -2,6 +2,7 @@
 const PizZip = require("pizzip");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const Docxtemplater = require("docxtemplater");
+import { scrubPastedTextInJson, scrubPastedTextInValue } from "@/lib/jsonAnswer";
 
 // ─── Structured AI output types ──────────────────────────────────────────────
 
@@ -271,13 +272,20 @@ export function renderDocxTemplateStructured(
   structured: StructuredAIOutput,
   flatData: Record<string, string>
 ): Buffer {
+  // Last-mile scrub: never let ChatGPT's "Pasted text" label reach the docx.
+  const clean = scrubPastedTextInJson(structured) as StructuredAIOutput;
+  const cleanFlat: Record<string, string> = {};
+  for (const [k, v] of Object.entries(flatData)) {
+    cleanFlat[k] = scrubPastedTextInValue(String(v ?? ""));
+  }
+
   const zip = new PizZip(templateBuffer);
   let xml = (zip.files["word/document.xml"] as { asText(): string }).asText();
 
   // Expand skills rows
-  if (structured.skills?.length) {
+  if (clean.skills?.length) {
     xml = expandParagraphInXml(xml, "skills-group-category", (pPr, rPr) =>
-      structured.skills
+      clean.skills
         .map(
           (s) =>
             `<w:p>${pPr}${buildRun(s.category + ": ", true, rPr)}${buildRun(
@@ -291,7 +299,7 @@ export function renderDocxTemplateStructured(
   }
 
   // Expand bullet groups
-  structured.experience?.forEach((exp, i) => {
+  clean.experience?.forEach((exp, i) => {
     if (exp.bullet_points?.length) {
       xml = expandParagraphInXml(xml, `experience-bullet-group-${i + 1}`, (pPr, rPr) =>
         exp.bullet_points
@@ -314,7 +322,7 @@ export function renderDocxTemplateStructured(
       },
     }),
   });
-  doc.render(flatData);
+  doc.render(cleanFlat);
   injectHyperlinks(doc.getZip());
 
   return doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;
@@ -329,6 +337,11 @@ export function renderDocxTemplate(
   templateBuffer: Buffer,
   data: Record<string, string>
 ): Buffer {
+  const cleanData: Record<string, string> = {};
+  for (const [k, v] of Object.entries(data)) {
+    cleanData[k] = scrubPastedTextInValue(String(v ?? ""));
+  }
+
   const zip = new PizZip(templateBuffer);
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
@@ -343,7 +356,7 @@ export function renderDocxTemplate(
     }),
   });
 
-  doc.render(data);
+  doc.render(cleanData);
   injectHyperlinks(doc.getZip());
 
   return doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;

@@ -2,10 +2,12 @@
  * Shared JSON extraction used by every path that turns pasted / LLM text into
  * a docx payload (batch-builder Build, builder page, OpenAI generate, AutoGen).
  *
- * ChatGPT (and some clipboard UIs) often wrap pasted content with a "Pasted text"
- * label. That label must never reach the docx renderer.
+ * ChatGPT (and some clipboard UIs) inject a "Pasted text" label — as a wrapper
+ * around the whole paste, or mid-sentence inside field values. That label must
+ * never reach the docx renderer.
  */
 
+const PASTED_TEXT_PHRASE = /\bpasted\s+text\b/gi;
 const PASTED_TEXT_LINE = /^\s*pasted\s+text\s*$/i;
 const PASTED_TEXT_PREFIX = /^\s*pasted\s+text\s*[\r\n]+/i;
 const FENCE_OPEN = /^\s*```(?:json|JSON)?\s*\r?\n?/;
@@ -76,21 +78,43 @@ export function stripJsonNoise(text: string): string {
   return s;
 }
 
-/** Remove "Pasted text" that leaked into string field values. */
-function scrubPastedTextInValue(value: string): string {
-  let s = value;
-  if (PASTED_TEXT_LINE.test(s.trim())) return "";
-  while (PASTED_TEXT_PREFIX.test(s)) {
-    s = s.replace(PASTED_TEXT_PREFIX, "");
-  }
-  // Inline prefix without a following newline: "Pasted text Foo" → "Foo"
-  s = s.replace(/^\s*pasted\s+text\s+/i, "");
+/**
+ * Remove every "Pasted text" occurrence from a string value and tidy whitespace /
+ * punctuation left behind (e.g. "direction, Pasted text design" → "direction, design").
+ */
+export function scrubPastedTextInValue(value: string): string {
+  if (!value) return value;
+  if (!PASTED_TEXT_PHRASE.test(value)) return value;
+  // Reset lastIndex after test() on a global regex
+  PASTED_TEXT_PHRASE.lastIndex = 0;
+
+  let s = value.replace(PASTED_TEXT_PHRASE, " ");
+  // Collapse whitespace (spaces / tabs; keep intentional newlines as paragraph breaks)
+  s = s
+    .replace(/[^\S\r\n]{2,}/g, " ")
+    .replace(/[^\S\r\n]*\n[^\S\r\n]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n");
+  // Fix punctuation left dangling after removal: "foo , bar" / "foo  ,bar" / " , bar"
+  s = s
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/([,.;:!?])\s*([,.;:!?])/g, "$1")
+    .replace(/^\s+/, "")
+    .replace(/\s+$/, "");
   return s;
 }
 
 export function scrubPastedTextInJson(value: unknown): unknown {
   if (typeof value === "string") return scrubPastedTextInValue(value);
-  if (Array.isArray(value)) return value.map(scrubPastedTextInJson);
+  if (Array.isArray(value)) {
+    return value
+      .map(scrubPastedTextInJson)
+      .filter((item) => {
+        // Drop array entries that were only the paste label (e.g. bold_words)
+        if (typeof item === "string" && PASTED_TEXT_LINE.test(item.trim())) return false;
+        if (typeof item === "string" && item.trim() === "") return false;
+        return true;
+      });
+  }
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
