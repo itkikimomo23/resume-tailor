@@ -22,11 +22,36 @@ export interface ExperienceEntry {
   bold_words: string[];
 }
 
+export interface CompanyInfo {
+  name?: string;
+  location?: string;
+}
+
 export interface StructuredAIOutput {
   profile_title: string;
   profile_summary: string;
   skills: SkillGroup[];
   experience: ExperienceEntry[];
+  // Optional per-slot company overrides: company_1, company_2, ...
+  [companyKey: `company_${number}`]: CompanyInfo | undefined;
+}
+
+/**
+ * Flattens optional top-level `company_N: { name, location }` objects into the
+ * <<company-name-N>> / <<company-location-N>> template variables. Only fields
+ * that are actually present are returned, so a JSON without company info
+ * leaves the rest of the render untouched.
+ */
+function mapCompaniesToFlat(structured: object): Record<string, string> {
+  const flat: Record<string, string> = {};
+  for (const [key, value] of Object.entries(structured)) {
+    const n = key.match(/^company_(\d+)$/)?.[1];
+    if (!n || !value || typeof value !== "object" || Array.isArray(value)) continue;
+    const { name, location } = value as Record<string, unknown>;
+    if (typeof name === "string" && name.trim()) flat[`company-name-${n}`] = name.trim();
+    if (typeof location === "string" && location.trim()) flat[`company-location-${n}`] = location.trim();
+  }
+  return flat;
 }
 
 // ─── XML helpers for structured rendering ────────────────────────────────────
@@ -175,7 +200,7 @@ export function isStructuredOutput(obj: Record<string, unknown>): boolean {
 }
 
 export function mapStructuredToFlat(structured: StructuredAIOutput): Record<string, string> {
-  const flat: Record<string, string> = {};
+  const flat: Record<string, string> = mapCompaniesToFlat(structured);
   if (structured.profile_title) flat["profile-title"] = structured.profile_title;
   if (structured.profile_summary) flat["profile-summary"] = structured.profile_summary;
   structured.experience?.forEach((exp, i) => {
@@ -202,7 +227,7 @@ export function getJsonCoveredVars(parsed: Record<string, unknown>): Set<string>
     return new Set(Object.keys(parsed));
   }
   const s = parsed as unknown as StructuredAIOutput;
-  const covered = new Set<string>();
+  const covered = new Set<string>(Object.keys(mapCompaniesToFlat(s)));
   if (s.profile_title) covered.add("profile-title");
   if (s.profile_summary) covered.add("profile-summary");
   if (s.skills?.length) {
