@@ -33,3 +33,28 @@ export async function PATCH(request: NextRequest) {
   if (error) return NextResponse.json({ message: error.message }, { status: 500 });
   return NextResponse.json({ updated: ids.length });
 }
+
+const MAX_DELETE = 100;
+
+export async function DELETE(request: NextRequest) {
+  const body = await request.json().catch(() => null);
+  const ids = body?.ids;
+
+  if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== "string" || !id))
+    return NextResponse.json({ message: "ids array is required" }, { status: 400 });
+
+  if (ids.length > MAX_DELETE)
+    return NextResponse.json({ message: `Cannot delete more than ${MAX_DELETE} applications at once` }, { status: 400 });
+
+  // Best-effort: a missing Drive file should not block the database delete.
+  await resumeClearingFields(ids);
+
+  const { data, error } = await supabase
+    .from("applications")
+    .delete()
+    .in("id", ids)
+    .select("id");
+
+  if (error) return NextResponse.json({ message: error.message }, { status: 500 });
+  return NextResponse.json({ deleted: data?.length ?? 0 });
+}

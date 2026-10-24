@@ -203,6 +203,9 @@ export default function ApplicationsPage() {
   const [downloadError, setDownloadError]     = useState<string | null>(null);
   const [bulkUpdating, setBulkUpdating]       = useState(false);
   const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting]       = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
   const [jdModal, setJdModal] = useState<{ open: boolean; loading: boolean; content: string | null; title: string; role: string }>({
     open: false, loading: false, content: null, title: "", role: "",
   });
@@ -416,6 +419,39 @@ export default function ApplicationsPage() {
     setBulkStatusUpdating(false);
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    setBulkDeleteError(null);
+    const ids = Array.from(selectedIds);
+    try {
+      const res = await fetch("/api/applications/batch", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        let message = "Delete failed";
+        try {
+          const data = await res.json();
+          if (data?.message) message = data.message;
+        } catch { /* ignore */ }
+        setBulkDeleteError(message);
+        return;
+      }
+      const remaining = Math.max(0, total - ids.length);
+      const maxPage = Math.max(1, Math.ceil(remaining / PAGE_SIZE));
+      setSelectedIds(new Set());
+      setConfirmBulkDelete(false);
+      if (page > maxPage) setPage(maxPage);
+      else setRefreshKey(k => k + 1);
+    } catch (e) {
+      setBulkDeleteError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const startEdit = (app: Application) => {
     setEditingId(app.id);
     setEditFields({ company_name: app.company_name, role: app.role });
@@ -579,48 +615,56 @@ export default function ApplicationsPage() {
                 </button>
               </div>
             )}
-
-            {selectedIds.size > 0 && (
-              <div className="ml-auto flex flex-col gap-0.5">
-                <div className="h-8 flex items-center gap-2">
-                  <span className="text-sm font-medium text-foreground whitespace-nowrap">{selectedIds.size} selected</span>
-                  <Select onValueChange={(val: string | null) => { if (val) void handleBulkPipelineChange(val); }} disabled={bulkUpdating}>
-                    <SelectTrigger size="sm" className="h-8 text-sm w-auto min-w-36">
-                      <SelectValue placeholder={bulkUpdating ? "Updating…" : "Set stage…"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PIPELINE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value} className="text-sm">{o.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select onValueChange={(val: string | null) => { if (val) void handleBulkStatusChange(val); }} disabled={bulkStatusUpdating}>
-                    <SelectTrigger size="sm" className="h-8 text-sm w-auto min-w-36">
-                      <SelectValue placeholder={bulkStatusUpdating ? "Updating…" : "Set status…"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending" className="text-sm">Pending</SelectItem>
-                      <SelectItem value="completed" className="text-sm">Completed</SelectItem>
-                      <SelectItem value="failed" className="text-sm">Failed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <button
-                    onClick={() => {
-                      applications
-                        .filter(a => selectedIds.has(a.id) && a.job_url)
-                        .forEach(a => window.open(a.job_url!, "_blank", "noopener,noreferrer"));
-                    }}
-                    disabled={!applications.some(a => selectedIds.has(a.id) && a.job_url)}
-                    className="size-7 flex items-center justify-center rounded-lg border border-input bg-transparent text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-30 disabled:pointer-events-none"
-                    title="Open selected job URLs in new tabs">
-                    <ExternalLink size={13} />
-                  </button>
-                  <button onClick={() => setSelectedIds(new Set())}
-                    className="size-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" title="Clear selection">
-                    <X size={13} />
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
+
+          {selectedIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-accent/40 px-3 py-2">
+              <span className="text-sm font-medium text-foreground whitespace-nowrap">{selectedIds.size} selected</span>
+              <Select onValueChange={(val: string | null) => { if (val) void handleBulkPipelineChange(val); }} disabled={bulkUpdating}>
+                <SelectTrigger size="sm" className="h-8 text-sm w-auto min-w-36 bg-card">
+                  <SelectValue placeholder={bulkUpdating ? "Updating…" : "Set stage…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {PIPELINE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value} className="text-sm">{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select onValueChange={(val: string | null) => { if (val) void handleBulkStatusChange(val); }} disabled={bulkStatusUpdating}>
+                <SelectTrigger size="sm" className="h-8 text-sm w-auto min-w-36 bg-card">
+                  <SelectValue placeholder={bulkStatusUpdating ? "Updating…" : "Set status…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending" className="text-sm">Pending</SelectItem>
+                  <SelectItem value="completed" className="text-sm">Completed</SelectItem>
+                  <SelectItem value="failed" className="text-sm">Failed</SelectItem>
+                </SelectContent>
+              </Select>
+              <button
+                onClick={() => {
+                  applications
+                    .filter(a => selectedIds.has(a.id) && a.job_url)
+                    .forEach(a => window.open(a.job_url!, "_blank", "noopener,noreferrer"));
+                }}
+                disabled={!applications.some(a => selectedIds.has(a.id) && a.job_url)}
+                className="size-7 flex items-center justify-center rounded-lg border border-input bg-card text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                title="Open selected job URLs in new tabs">
+                <ExternalLink size={13} />
+              </button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={bulkDeleting}
+                onClick={() => { setBulkDeleteError(null); setConfirmBulkDelete(true); }}
+                title="Delete the selected applications"
+              >
+                <Trash2 size={13} />
+                {bulkDeleting ? "Deleting…" : "Delete selected"}
+              </Button>
+              <button onClick={() => setSelectedIds(new Set())}
+                className="size-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" title="Clear selection">
+                <X size={13} />
+              </button>
+            </div>
+          )}
 
           {downloadError && (
             <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">
@@ -1092,6 +1136,37 @@ export default function ApplicationsPage() {
               <Button variant="destructive" size="sm" disabled={deletingId === confirmDeleteId}
                 onClick={async () => { if (!confirmDeleteId) return; await handleDelete(confirmDeleteId); }}>
                 {deletingId === confirmDeleteId ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Bulk delete confirmation */}
+      <Dialog.Root open={confirmBulkDelete} onOpenChange={open => { if (!open && !bulkDeleting) setConfirmBulkDelete(false); }}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 duration-150" />
+          <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-sm bg-card rounded-xl ring-1 ring-foreground/10 shadow-xl p-6 space-y-4 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 duration-150">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 flex items-center justify-center size-9 rounded-full bg-destructive/10">
+                <AlertTriangle size={16} className="text-destructive" />
+              </div>
+              <div>
+                <Dialog.Title className="text-sm font-semibold text-foreground">
+                  Delete {selectedIds.size} application{selectedIds.size === 1 ? "" : "s"}?
+                </Dialog.Title>
+                <Dialog.Description className="text-xs text-muted-foreground mt-1">
+                  This will permanently remove {selectedIds.size === 1 ? "this application" : `these ${selectedIds.size} applications`} and any uploaded resumes. This action cannot be undone.
+                </Dialog.Description>
+                {bulkDeleteError && (
+                  <p className="text-xs text-destructive mt-2">{bulkDeleteError}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" disabled={bulkDeleting} onClick={() => setConfirmBulkDelete(false)}>Cancel</Button>
+              <Button variant="destructive" size="sm" disabled={bulkDeleting || selectedIds.size === 0} onClick={() => void handleBulkDelete()}>
+                {bulkDeleting ? "Deleting…" : "Delete"}
               </Button>
             </div>
           </Dialog.Popup>
