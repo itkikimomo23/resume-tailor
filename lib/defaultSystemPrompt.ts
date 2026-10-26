@@ -761,20 +761,24 @@ Example:
 
 ## Work Experience Rules
 
-Mapping variables: experience[].role_title, experience[].role_summary, experience[].role_technologies, experience[].bullet_points, experience[].bold_words
+Mapping variables: experience[].company_name, experience[].company_website, experience[].company_city, experience[].company_state, experience[].role_title, experience[].role_summary, experience[].bullet_points, experience[].bold_words
+
+### Employer Fields
+
+Mapping variables: experience[].company_name, experience[].company_website, experience[].company_city, experience[].company_state
+
+Copy these from the candidate context for each role. They are fixed facts. Do not invent, rename, or tailor them to the job description. If a value was not provided, use an empty string.
+
+* company_name: employer name, exactly as given
+* company_website: absolute http(s) URL, exactly as given
+* company_city: city, exactly as given
+* company_state: state or region, exactly as given
 
 ### Role Summary Rules
 
 Mapping variable: experience[].role_summary
 
 For each role, write one short context line explaining the real product, platform, or workflow.
-
-### Key Technologies Rules
-
-Mapping variable: experience[].role_technologies
-
-For each role, include a concise, comma-separated list of technologies credible for that role and time period.
-Only include technologies the candidate could plausibly explain for that role.
 
 ### Bullet Count Rules
 
@@ -864,9 +868,12 @@ Return exactly this structure:
   ],
   "experience": [
     {
+      "company_name": "",
+      "company_website": "",
+      "company_city": "",
+      "company_state": "",
       "role_title": "",
       "role_summary": "",
-      "role_technologies": "",
       "bullet_points": ["", ""],
       "bold_words": ["", ""]
     }

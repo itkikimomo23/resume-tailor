@@ -12,6 +12,10 @@ export interface SkillGroup {
 }
 
 export interface ExperienceEntry {
+  company_name?: string;
+  company_website?: string;
+  company_city?: string;
+  company_state?: string;
   employment_context?: string;
   end_client_name?: string;
   end_client_website?: string;
@@ -41,6 +45,10 @@ export interface StructuredAIOutput {
  * <<company-name-N>> / <<company-location-N>> template variables. Only fields
  * that are actually present are returned, so a JSON without company info
  * leaves the rest of the render untouched.
+ *
+ * Experience entries that carry company_name / company_website / company_city /
+ * company_state (the current ChatGPT shape) are applied afterward and override
+ * these slots for the same index.
  */
 function mapCompaniesToFlat(structured: object): Record<string, string> {
   const flat: Record<string, string> = {};
@@ -51,6 +59,25 @@ function mapCompaniesToFlat(structured: object): Record<string, string> {
     if (typeof name === "string" && name.trim()) flat[`company-name-${n}`] = name.trim();
     if (typeof location === "string" && location.trim()) flat[`company-location-${n}`] = location.trim();
   }
+  return flat;
+}
+
+/** Employer fields on one experience entry → <<company-*-N>> template slots. */
+function mapExperienceCompany(exp: ExperienceEntry, n: number): Record<string, string> {
+  const flat: Record<string, string> = {};
+  const companyName = exp.company_name?.trim() ?? "";
+  const website = exp.company_website ? sanitizeUrl(exp.company_website) : null;
+  if (companyName) {
+    flat[`company-name-${n}`] = website ? encodeHyperlinkValue(companyName, website) : companyName;
+  }
+  if (website) flat[`company-website-${n}`] = website;
+
+  const city = exp.company_city?.trim() ?? "";
+  const state = exp.company_state?.trim() ?? "";
+  if (city) flat[`company-city-${n}`] = city;
+  if (state) flat[`company-state-${n}`] = state;
+  const location = [city, state].filter(Boolean).join(", ");
+  if (location) flat[`company-location-${n}`] = location;
   return flat;
 }
 
@@ -204,13 +231,15 @@ export function mapStructuredToFlat(structured: StructuredAIOutput): Record<stri
   if (structured.profile_title) flat["profile-title"] = structured.profile_title;
   if (structured.profile_summary) flat["profile-summary"] = structured.profile_summary;
   structured.experience?.forEach((exp, i) => {
-    flat[`role-title-${i + 1}`] = exp.role_title ?? "";
-    if (exp.role_summary) flat[`role-summary-${i + 1}`] = exp.role_summary;
-    if (exp.role_technologies) flat[`role-technologies-${i + 1}`] = exp.role_technologies;
-    if (exp.employment_context) flat[`employment-context-${i + 1}`] = exp.employment_context;
+    const n = i + 1;
+    Object.assign(flat, mapExperienceCompany(exp, n));
+    flat[`role-title-${n}`] = exp.role_title ?? "";
+    if (exp.role_summary) flat[`role-summary-${n}`] = exp.role_summary;
+    if (exp.role_technologies) flat[`role-technologies-${n}`] = exp.role_technologies;
+    if (exp.employment_context) flat[`employment-context-${n}`] = exp.employment_context;
     if (exp.end_client_name) {
       const url = exp.end_client_website ? sanitizeUrl(exp.end_client_website) : null;
-      flat[`end-client-${i + 1}`] = url
+      flat[`end-client-${n}`] = url
         ? encodeHyperlinkValue(exp.end_client_name, url)
         : exp.end_client_name;
     }
@@ -235,12 +264,14 @@ export function getJsonCoveredVars(parsed: Record<string, unknown>): Set<string>
     covered.add("skillset-list");
   }
   s.experience?.forEach((exp, i) => {
-    if (exp.role_title) covered.add(`role-title-${i + 1}`);
-    if (exp.role_summary) covered.add(`role-summary-${i + 1}`);
-    if (exp.role_technologies) covered.add(`role-technologies-${i + 1}`);
-    if (exp.employment_context) covered.add(`employment-context-${i + 1}`);
-    if (exp.end_client_name) covered.add(`end-client-${i + 1}`);
-    if (exp.bullet_points?.length) covered.add(`experience-bullet-group-${i + 1}`);
+    const n = i + 1;
+    for (const key of Object.keys(mapExperienceCompany(exp, n))) covered.add(key);
+    if (exp.role_title) covered.add(`role-title-${n}`);
+    if (exp.role_summary) covered.add(`role-summary-${n}`);
+    if (exp.role_technologies) covered.add(`role-technologies-${n}`);
+    if (exp.employment_context) covered.add(`employment-context-${n}`);
+    if (exp.end_client_name) covered.add(`end-client-${n}`);
+    if (exp.bullet_points?.length) covered.add(`experience-bullet-group-${n}`);
   });
   return covered;
 }

@@ -168,7 +168,7 @@ function ResumeSection({ templates, loadingData, state, onChange, onValidate, on
             state.jsonInput.trim() && !jsonSyntaxValid ? "border-destructive/60 focus:border-destructive" : ""
           }`}
           rows={12}
-          placeholder={'{\n  "profile_title": "Senior Engineer | Python • AWS",\n  "profile_summary": "…",\n  "skills": [{ "category": "Backend", "items": ["Python", "FastAPI"] }],\n  "experience": [{ "role_title": "Senior Engineer", "bullet_points": ["Built…"], "bold_words": ["Python"] }]\n}'}
+          placeholder={'{\n  "profile_title": "Senior Full Stack Engineer",\n  "profile_summary": "…",\n  "skills": [{ "category": "Programming Languages", "items": ["Python", "TypeScript"] }],\n  "experience": [{\n    "company_name": "Forage",\n    "company_website": "https://www.joinforage.com",\n    "company_city": "San Francisco",\n    "company_state": "CA",\n    "role_title": "Senior Software Engineer",\n    "role_summary": "…",\n    "bullet_points": ["Built…"],\n    "bold_words": ["Python"]\n  }]\n}'}
           value={state.jsonInput}
           onChange={(e) => onChange({ jsonInput: e.target.value, error: null, downloadUrl: null, validation: null })}
           onPaste={(e) => {
